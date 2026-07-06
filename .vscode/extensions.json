@@ -1,5 +1,6 @@
 {
-  "recommendations": [
-    "meta.meta-vr-dev"
-  ]
+    "recommendations": [
+        "meta.meta-vr-dev",
+        "visualstudiotoolsforunity.vstuc"
+    ]
 }
