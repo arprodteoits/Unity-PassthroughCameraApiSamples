@@ -20,6 +20,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [Space(10)]
         public UnityEvent<int> OnObjectsDetected;
 
+        [Header("Performa AI")]
+        // Tambahkan ini untuk menarik elemen teks dari Canvas ke Inspector
+        public Text inferenceTimeText; // Gunakan TMPro.TextMeshProUGUI jika pakai TextMeshPro
+
         internal readonly List<BoundingBoxData> m_boxDrawn = new();
         private string[] m_labels;
         private readonly List<BoundingBoxData> m_boxPool = new();
@@ -222,6 +226,19 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 ReturnToPool(box);
             }
             m_boxDrawn.Clear();
+        }
+
+        // Fungsi untuk dipanggil dari RunManager
+        public void UpdateInferenceTime(long timeInMs)
+        {
+            if (inferenceTimeText != null)
+            {
+                // Menghitung FPS (dengan pengecekan agar tidak terjadi error dibagi nol)
+                float fps = timeInMs > 0 ? 1000f / timeInMs : 0f;
+                
+                // Menampilkan waktu (ms) dan FPS (dibulatkan 1 angka di belakang koma)
+                inferenceTimeText.text = $"Inference: {timeInMs} ms | {fps:F1} FPS";
+            }
         }
     }
 }

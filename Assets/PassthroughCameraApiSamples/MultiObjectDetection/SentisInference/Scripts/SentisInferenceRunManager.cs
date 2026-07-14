@@ -3,11 +3,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+
 using Meta.XR;
 using Meta.XR.Samples;
 using Unity.Collections;
 using Unity.InferenceEngine;
 using UnityEngine;
+
 
 namespace PassthroughCameraSamples.MultiObjectDetection
 {
@@ -109,10 +111,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Update Capture data
             Texture targetTexture = m_cameraAccess.GetTexture();
 
+            // ... (kode sebelumnya tetap sama) ...
             // Convert the texture to a Tensor and schedule the inference
             var textureTransform = new TextureTransform().SetDimensions(targetTexture.width, targetTexture.height, 3);
             using var input = new Tensor<float>(new TensorShape(1, 3, m_inputSize.x, m_inputSize.y));
             TextureConverter.ToTensor(targetTexture, input, textureTransform);
+
+            // ================== MULAI PENGUKURAN WAKTU ==================
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew(); 
+            // ============================================================
 
             // Schedule all model layers
             m_engine.Schedule(input);
@@ -137,7 +144,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             using var classIDs = classIDsAwaiter.GetResult();
             if (classIDs.shape[0] == 0)
             {
-                Debug.LogError("classIDs.shape[0] == 0");
+                UnityEngine.Debug.LogError("classIDs.shape[0] == 0"); // Gunakan UnityEngine.Debug agar tidak bentrok dengan System.Diagnostics
                 yield break;
             }
 
@@ -149,11 +156,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             using var scores = scoresAwaiter.GetResult();
             if (scores.shape[0] == 0)
             {
-                Debug.LogError("scores.shape[0] == 0");
+                UnityEngine.Debug.LogError("scores.shape[0] == 0");
                 yield break;
             }
 
+            // ================== HENTIKAN PENGUKURAN WAKTU ==================
+            stopwatch.Stop();
+            long inferenceTime = stopwatch.ElapsedMilliseconds;
+            
+            // Kirim waktu ke UI Manager
+            if (m_uiInference != null)
+            {
+                m_uiInference.UpdateInferenceTime(inferenceTime);
+            }
+            // ===============================================================
+
             NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold);
+            // ... (kode setelahnya tetap sama) ...
 
             // Checking if spatial anchor is tracked ensures bounding boxes are placed at correct world space positIons.
             if (!m_cameraAccess.IsPlaying || m_detectionManager.m_spatialAnchor == null || !m_detectionManager.m_spatialAnchor.IsTracked)
