@@ -1,7 +1,8 @@
 {
   "dependencies": {
     "com.meta.xr.mrutilitykit": "85.0.0",
-    "com.unity.ai.inference": "2.5.0",
+    "com.unity.ai.assistant": "2.14.0-pre.1",
+    "com.unity.ai.inference": "2.6.1",
     "com.unity.feature.development": "1.0.2",
     "com.unity.mobile.android-logcat": "1.4.7",
     "com.unity.ugui": "2.0.0",

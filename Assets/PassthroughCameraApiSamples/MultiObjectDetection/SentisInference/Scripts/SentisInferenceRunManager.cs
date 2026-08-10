@@ -3,6 +3,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text; // Ditambahkan untuk StringBuilder
+using System.IO;   // Ditambahkan untuk File I/O
 
 using Meta.XR;
 using Meta.XR.Samples;
@@ -38,12 +40,29 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Vector2Int m_inputSize;
         private readonly List<(int classId, Vector4 boundingBox)> m_detections = new List<(int classId, Vector4 boundingBox)>();
 
+        // ================== VARIABEL UNTUK EKSTRAK DATA (QUEST 3) ==================
+        private string m_logFilePath;
+        private StringBuilder m_logData = new StringBuilder();
+        private int m_inferenceCount = 0;
+        private const int BATCH_WRITE_SIZE = 50; // Menulis ke storage tiap 50 inferensi untuk mencegah stuttering di VR
+        // ===========================================================================
+
         private void Awake()
         {
             var model = ModelLoader.Load(m_sentisModel);
             var inputShape = model.inputs[0].shape;
             m_inputSize = new Vector2Int(inputShape.Get(2), inputShape.Get(3));
             m_engine = new Worker(model, m_backend);
+
+            // ================== INISIALISASI FILE LOG ==================
+            // Menggunakan persistentDataPath yang valid untuk Android/Quest 3
+            string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            m_logFilePath = Path.Combine(Application.persistentDataPath, $"InferenceLog_{timestamp}.csv");
+            
+            // Buat header untuk file CSV
+            File.WriteAllText(m_logFilePath, "InferenceID,InferenceTimeMs,ObjectsDetected\n");
+            UnityEngine.Debug.Log($"[SICS Data Log] File log dibuat di: {m_logFilePath}");
+            // ===========================================================
         }
 
         private IEnumerator Start()
@@ -66,6 +85,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_engine.PeekOutput(1)?.CompleteAllPendingOperations();
             m_engine.PeekOutput(2)?.CompleteAllPendingOperations();
             m_engine.Dispose();
+
+            // ================== SIMPAN SISA DATA SAAT APLIKASI DITUTUP ==================
+            if (m_logData.Length > 0)
+            {
+                File.AppendAllText(m_logFilePath, m_logData.ToString());
+                m_logData.Clear();
+                UnityEngine.Debug.Log("[SICS Data Log] Sisa data log berhasil disimpan.");
+            }
+            // ===========================================
+
+            
         }
 
         internal static void PreloadModel(ModelAsset modelAsset)
