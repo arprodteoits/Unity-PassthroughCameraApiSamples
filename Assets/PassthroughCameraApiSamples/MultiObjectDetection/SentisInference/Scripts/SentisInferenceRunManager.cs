@@ -41,10 +41,13 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private readonly List<(int classId, Vector4 boundingBox)> m_detections = new List<(int classId, Vector4 boundingBox)>();
 
         // ================== VARIABEL UNTUK EKSTRAK DATA (QUEST 3) ==================
+        // ==========================================
+        // [BARU / PERBAIKAN] Variabel Logging
+        // ==========================================
+        private StringBuilder m_logBuffer = new StringBuilder();
         private string m_logFilePath;
-        private StringBuilder m_logData = new StringBuilder();
-        private int m_inferenceCount = 0;
-        private const int BATCH_WRITE_SIZE = 50; // Menulis ke storage tiap 50 inferensi untuk mencegah stuttering di VR
+        private int m_inferenceCounter = 0;
+        private const int FLUSH_EVERY_N_INFERENCES = 30; // Tulis ke disk setiap 30 kali inferensi
         // ===========================================================================
 
         private void Awake()
@@ -54,15 +57,49 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_inputSize = new Vector2Int(inputShape.Get(2), inputShape.Get(3));
             m_engine = new Worker(model, m_backend);
 
-            // ================== INISIALISASI FILE LOG ==================
-            // Menggunakan persistentDataPath yang valid untuk Android/Quest 3
-            string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            m_logFilePath = Path.Combine(Application.persistentDataPath, $"InferenceLog_{timestamp}.csv");
+         // Pastikan path selalu mengarah ke persistentDataPath agar diberi izin akses di Android
+            m_logFilePath = Path.Combine(Application.persistentDataPath, "Inference_Log.csv");
+
+            // Buat file baru + header jika file belum ada
+            if (!File.Exists(m_logFilePath))
+            {
+                string header = "Timestamp_Sec,InferenceTime_Ms,ObjectName,Confidence,Box_X1,Box_Y1,Box_X2,Box_Y2\n";
+                File.WriteAllText(m_logFilePath, header);
+            }
+        }
+
+// Contoh pemanggilan di dalam fungsi Post-Processing / setelah Inferensi selesai:
+        private void RecordInferenceLog(float inferenceTimeMs, string label, float confidence, Vector4 box)
+        {
+            // Gunakan Time.timeAsDouble / Time.time untuk waktu sejak aplikasi berjalan
+            string line = $"{Time.time:F2},{inferenceTimeMs:F2},{label},{confidence:F2},{box.x:F1},{box.y:F1},{box.z:F1},{box.w:F1}\n";
             
-            // Buat header untuk file CSV
-            File.WriteAllText(m_logFilePath, "InferenceID,InferenceTimeMs,ObjectsDetected\n");
-            UnityEngine.Debug.Log($"[SICS Data Log] File log dibuat di: {m_logFilePath}");
-            // ===========================================================
+            m_logBuffer.Append(line);
+            m_inferenceCounter++;
+
+            // Batch Save: Tulis ke disk jika buffer sudah mencapai kuota
+            if (m_inferenceCounter >= FLUSH_EVERY_N_INFERENCES)
+            {
+                FlushLogToFile();
+            }
+        }
+
+// Fungsi penulisan buffer RAM ke disk
+        public void FlushLogToFile()
+        {
+            if (m_logBuffer.Length == 0) return;
+
+            try
+            {
+                File.AppendAllText(m_logFilePath, m_logBuffer.ToString());
+                m_logBuffer.Clear();
+                m_inferenceCounter = 0;
+                Debug.Log($"[LOG SUCCESS] Log inferensi berhasil ditulis ke: {m_logFilePath}");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[LOG ERROR] Gagal menulis log: {e.Message}");
+            }
         }
 
         private IEnumerator Start()
@@ -79,6 +116,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
         }
 
+        // ==========================================
+        // [KRUSIAL UNTUK META QUEST 3] Lifecycle Hooks
+        // ==========================================
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            // Terpanggil saat headset dilepas atau aplikasi diminimalkan
+            if (pauseStatus)
+            {
+                FlushLogToFile();
+            }
+        }
+
+        private void OnDisable()
+        {
+            FlushLogToFile();
+        }
+
         private void OnDestroy()
         {
             m_engine.PeekOutput(0)?.CompleteAllPendingOperations();
@@ -87,15 +141,21 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_engine.Dispose();
 
             // ================== SIMPAN SISA DATA SAAT APLIKASI DITUTUP ==================
-            if (m_logData.Length > 0)
+            if (m_logBuffer.Length > 0)
             {
-                File.AppendAllText(m_logFilePath, m_logData.ToString());
-                m_logData.Clear();
+                File.AppendAllText(m_logFilePath, m_logBuffer.ToString());
+                m_logBuffer.Clear();
                 UnityEngine.Debug.Log("[SICS Data Log] Sisa data log berhasil disimpan.");
             }
             // ===========================================
+            FlushLogToFile();
 
             
+        }
+
+        private void OnApplicationQuit()
+        {
+            FlushLogToFile();
         }
 
         internal static void PreloadModel(ModelAsset modelAsset)
